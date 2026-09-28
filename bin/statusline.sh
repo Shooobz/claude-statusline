@@ -168,6 +168,13 @@ if [[ "$parent_cmd" == *"--dangerously-skip-permissions"* ]]; then
     skip_perms="⚡  "
 fi
 
+cost_usd=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
+cost_seg=""
+if [ -n "$cost_usd" ] && [ "$cost_usd" != "null" ] && [ "$cost_usd" != "0" ]; then
+    cost_fmt=$(printf "%.2f" "$cost_usd")
+    cost_seg="\$${cost_fmt}"
+fi
+
 line1="${blue}${model_name}${reset}"
 line1+="${sep}"
 line1+="✍️ ${pct_color}${pct_used}%${reset}"
@@ -202,6 +209,9 @@ if [ -n "$stdin_five_pct" ]; then
     five_hour_reset_epoch=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
     seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty' | awk '{printf "%.0f", $1}')
     seven_day_reset_epoch=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
+fi
+if [ -n "$cost_seg" ]; then
+    line1+="${sep}${green}${cost_seg}${reset}"
 fi
 
 # ── Fallback: API call (cached) ────────────────────────
@@ -310,6 +320,23 @@ if [ -n "$seven_day_pct" ]; then
     [ -n "$rate_lines" ] && rate_lines+="\n"
     rate_lines+="${white}weekly${reset}  ${seven_day_bar} ${seven_day_pct_color}${seven_day_pct_fmt}%${reset}"
     [ -n "$seven_day_reset" ] && rate_lines+=" ${dim}⟳${reset} ${white}${seven_day_reset}${reset}"
+fi
+
+if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
+    sonnet_util=$(echo "$usage_data" | jq -r '.seven_day_sonnet.utilization // empty')
+    if [ -n "$sonnet_util" ] && [ "$sonnet_util" != "null" ]; then
+        sonnet_pct=$(echo "$sonnet_util" | awk '{printf "%.0f", $1}')
+        sonnet_reset_iso=$(echo "$usage_data" | jq -r '.seven_day_sonnet.resets_at // empty')
+        sonnet_reset_epoch=$(iso_to_epoch "$sonnet_reset_iso")
+        sonnet_reset=$(format_epoch_time "$sonnet_reset_epoch" "datetime")
+        sonnet_bar=$(build_bar "$sonnet_pct" "$bar_width")
+        sonnet_pct_color=$(color_for_pct "$sonnet_pct")
+        sonnet_pct_fmt=$(printf "%3d" "$sonnet_pct")
+
+        [ -n "$rate_lines" ] && rate_lines+="\n"
+        rate_lines+="${white}sonnet${reset}  ${sonnet_bar} ${sonnet_pct_color}${sonnet_pct_fmt}%${reset}"
+        [ -n "$sonnet_reset" ] && rate_lines+=" ${dim}⟳${reset} ${white}${sonnet_reset}${reset}"
+    fi
 fi
 
 if [ "$extra_enabled" = "true" ] && [ -n "$usage_data" ]; then
